@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html>
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --bg: #ffffff; --fg: #1f2328; --muted: #6b7280; --line: #e5e7eb;
+    --card: #f8fafc; --accent: #1a73e8; --buy: #137333; --sell: #c5221f;
+    --warn-bg: #fef7e0; --warn-fg: #7a4f01; --err-bg: #fce8e6; --err-fg: #a50e0e;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 12px 14px 80px; background: var(--bg); color: var(--fg);
+         font: 14px/1.45 "Sarabun", "Noto Sans Thai", system-ui, sans-serif; }
+  .wrap { max-width: 520px; margin: 0 auto; }
+  .tabs { display: flex; gap: 4px; background: var(--card); padding: 4px; border-radius: 10px; margin-bottom: 14px; }
+  .tabs button { flex: 1; border: 0; background: transparent; padding: 8px; border-radius: 8px;
+                 font: inherit; color: var(--muted); cursor: pointer; }
+  .tabs button.on { background: #fff; color: var(--fg); font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,.12); }
+  label { display: block; font-size: 12px; color: var(--muted); margin: 10px 0 4px; }
+  input, select { width: 100%; padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px;
+                  font: inherit; background: #fff; color: var(--fg); }
+  input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-color: transparent; }
+  .row { display: flex; gap: 8px; }
+  .row > div { flex: 1; min-width: 0; }
+  .seg { display: flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .seg button { flex: 1; border: 0; padding: 9px; background: #fff; font: inherit; cursor: pointer; color: var(--muted); }
+  .seg button + button { border-left: 1px solid var(--line); }
+  .seg button.on[data-v=Buy] { background: var(--buy); color: #fff; }
+  .seg button.on[data-v=Sell] { background: var(--sell); color: #fff; }
+  .seg button.on[data-v=Div] { background: var(--accent); color: #fff; }
+  .info { background: var(--card); border-radius: 8px; padding: 8px 10px; margin-top: 8px; font-size: 12.5px; color: var(--muted); }
+  .info b { color: var(--fg); font-weight: 600; }
+  .hint { font-size: 11.5px; color: var(--muted); margin-top: 3px; }
+  .preview { margin-top: 12px; padding: 10px; border: 1px dashed var(--line); border-radius: 8px; font-size: 13px; }
+  .primary { width: 100%; margin-top: 14px; padding: 11px; border: 0; border-radius: 8px; background: var(--accent);
+             color: #fff; font: inherit; font-weight: 600; cursor: pointer; }
+  .primary:disabled { opacity: .5; cursor: default; }
+  .ghost { background: #fff; color: var(--fg); border: 1px solid var(--line); }
+  .msg { margin-top: 12px; padding: 10px; border-radius: 8px; font-size: 13px; white-space: pre-line; }
+  .msg.ok { background: #e6f4ea; color: #0d652d; }
+  .msg.warn { background: var(--warn-bg); color: var(--warn-fg); }
+  .msg.err { background: var(--err-bg); color: var(--err-fg); }
+  .msg ul { margin: 6px 0 0; padding-left: 18px; }
+  .dca { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px 10px; margin-top: 10px; }
+  .dca.off { opacity: .45; }
+  .dca .head { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+  .dca .head input { width: auto; }
+  .dca .head small { margin-left: auto; font-weight: 400; color: var(--muted); }
+  .dca label { margin-top: 6px; }
+  h3 { font-size: 13px; color: var(--muted); font-weight: 600; margin: 22px 0 6px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  td { padding: 5px 4px; border-bottom: 1px solid var(--line); }
+  td.n { text-align: right; font-variant-numeric: tabular-nums; }
+  .hidden { display: none !important; }
+  .loading { color: var(--muted); text-align: center; padding: 30px 0; }
+</style>
+</head>
+<body data-tab="<?= initialTab ?>">
+<div class="wrap">
+  <div class="tabs">
+    <button data-tab="single">➕ รายการเดียว</button>
+    <button data-tab="dca">📅 DCA</button>
+  </div>
+  <div id="loading" class="loading">กำลังโหลดข้อมูล…</div>
+
+  <!-- single entry -->
+  <section id="tab-single" class="hidden">
+    <div class="row">
+      <div><label>วันที่</label><input type="date" id="s-date"></div>
+      <div><label>ประเภท</label>
+        <div class="seg" id="s-type">
+          <button data-v="Buy" class="on">ซื้อ</button><button data-v="Sell">ขาย</button><button data-v="Div">ปันผล</button>
+        </div>
+      </div>
+    </div>
+    <label>สินทรัพย์</label>
+    <select id="s-symbol"></select>
+    <input id="s-symbol-new" class="hidden" placeholder="ชื่อสินทรัพย์ใหม่ เช่น NVDA" style="margin-top:6px">
+    <div class="info" id="s-info"></div>
+
+    <div id="s-trade">
+      <div class="row">
+        <div><label>ยอดเงินรวม (บาท)</label><input id="s-amount" inputmode="decimal" placeholder="เช่น 20000"></div>
+        <div><label>จำนวนหน่วยที่ได้</label><input id="s-units" inputmode="decimal" placeholder="จากใบยืนยัน"></div>
+      </div>
+      <div class="row">
+        <div><label id="s-price-label">ราคาต่อหน่วย (บาท)</label><input id="s-price" inputmode="decimal" placeholder="คำนวณให้อัตโนมัติ"></div>
+        <div id="s-fx-box"><label>USD/THB</label><input id="s-fx" inputmode="decimal"></div>
+      </div>
+      <label>ค่าธรรมเนียม (บาท)</label><input id="s-fee" inputmode="decimal" value="0">
+      <div class="hint">กรอกแค่ "ยอดเงิน + จำนวนหน่วย" ก็พอ ราคาต่อหน่วยจะคำนวณให้ (หรือกรอกราคาแล้วระบบคำนวณยอดเงินให้)</div>
+    </div>
+    <div id="s-div" class="hidden">
+      <label>เงินปันผลที่ได้รับ (บาท)</label><input id="s-divamt" inputmode="decimal">
+    </div>
+
+    <div class="preview" id="s-preview"></div>
+    <button class="primary" id="s-save">บันทึก</button>
+    <div id="s-msg"></div>
+
+    <h3>รายการล่าสุดใน Transaction</h3>
+    <table id="recent"></table>
+  </section>
+
+  <!-- DCA -->
+  <section id="tab-dca" class="hidden">
+    <label>วันที่</label><input type="date" id="d-date">
+    <div class="hint">ยอดเงินดึงจากคอลัมน์ F ของ Portfolio Summary (แถวที่ติด "dca") แก้ได้ กรอกจำนวนหน่วยที่ได้จริงแล้วกดบันทึกครั้งเดียว</div>
+    <div id="d-list"></div>
+    <button class="primary" id="d-save">บันทึกทั้งหมด</button>
+    <div id="d-msg"></div>
+  </section>
+</div>
+
+<script>
+var INITIAL_TAB = document.body.dataset.tab === 'dca' ? 'dca' : 'single';
+var DATA = null;
+var sym = {};               // symbol -> info
+var sType = 'Buy';
+var priceEdited = false;    // single form: user typed the price
+
+var $ = function (id) { return document.getElementById(id); };
+var num = function (v) { var n = parseFloat(String(v).replace(/,/g, '')); return isFinite(n) ? n : null; };
+var fmt = function (n, d) {
+  return n === null || n === undefined ? '–' :
+    Number(n).toLocaleString('th-TH', { maximumFractionDigits: d === undefined ? 2 : d });
+};
+var round = function (n, d) { var p = Math.pow(10, d); return Math.round(n * p) / p; };
+
+function call(fn) {
+  var args = [].slice.call(arguments, 1);
+  return new Promise(function (ok, fail) {
+    google.script.run.withSuccessHandler(ok).withFailureHandler(fail)[fn].apply(null, args);
+  });
+}
+
+function showTab(t) {
+  document.querySelectorAll('.tabs button').forEach(function (b) { b.classList.toggle('on', b.dataset.tab === t); });
+  $('tab-single').classList.toggle('hidden', t !== 'single' || !DATA);
+  $('tab-dca').classList.toggle('hidden', t !== 'dca' || !DATA);
+  showTab.current = t;
+}
+document.querySelectorAll('.tabs button').forEach(function (b) {
+  b.onclick = function () { showTab(b.dataset.tab); };
+});
+
+function load() {
+  return call('pfGetFormData').then(function (d) {
+    DATA = d; sym = {};
+    d.symbols.forEach(function (s) { sym[s.symbol] = s; });
+    $('loading').classList.add('hidden');
+    renderSingle(); renderDca(); renderRecent();
+    showTab(showTab.current || INITIAL_TAB);
+  }).catch(function (e) { $('loading').textContent = 'โหลดไม่สำเร็จ: ' + e.message; });
+}
+
+/* ---------- single ---------- */
+
+function renderSingle() {
+  var sel = $('s-symbol'), cur = sel.value;
+  sel.innerHTML = '';
+  DATA.symbols.forEach(function (s) {
+    var o = document.createElement('option');
+    o.value = s.symbol; o.textContent = s.symbol + (s.isUsd ? '  (USD)' : '') + (s.dca !== null ? '  · DCA' : '');
+    sel.appendChild(o);
+  });
+  var o = document.createElement('option'); o.value = '__new'; o.textContent = '+ สินทรัพย์ใหม่…'; sel.appendChild(o);
+  if (cur && (sym[cur] || cur === '__new')) sel.value = cur;
+  if (!$('s-date').value) $('s-date').value = DATA.today;
+  if (!$('s-fx').value && DATA.fx) $('s-fx').value = round(DATA.fx, 4);
+  onSymbol();
+}
+
+function currentSymbol() {
+  return $('s-symbol').value === '__new' ? $('s-symbol-new').value.trim() : $('s-symbol').value;
+}
+function currentInfo() { return sym[currentSymbol()] || null; }
+
+function onSymbol() {
+  var isNew = $('s-symbol').value === '__new';
+  $('s-symbol-new').classList.toggle('hidden', !isNew);
+  var s = currentInfo();
+  if (s && s.dca !== null && !$('s-amount').value && sType === 'Buy') $('s-amount').value = s.dca;
+  var usd = s ? s.isUsd : false;
+  $('s-fx-box').classList.toggle('hidden', !usd);
+  $('s-price-label').textContent = 'ราคาต่อหน่วย (' + (usd ? 'USD' : 'บาท') + ')';
+  var info = [];
+  if (s && s.count) {
+    info.push('ถืออยู่ <b>' + fmt(s.units, 6) + '</b> หน่วย');
+    if (s.units > 0) info.push('ต้นทุนเฉลี่ย <b>฿' + fmt(s.cost / s.units) + '</b>');
+    if (s.lastPrice) info.push('ซื้อล่าสุด ฿' + fmt(s.lastPrice) + ' (' + s.lastDate + ')');
+  }
+  if (s && s.priceThb) info.push('ราคาวันนี้ ฿' + fmt(s.priceThb) + (s.priceUsd ? ' ($' + fmt(s.priceUsd) + ')' : ''));
+  if (!s) info.push('สินทรัพย์ใหม่ — หลังบันทึกต้องเพิ่มแถวในชีต Price / Cost / Portfolio Summary เอง');
+  $('s-info').innerHTML = info.join(' · ');
+  recalc();
+}
+
+function recalc(source) {
+  var usd = !$('s-fx-box').classList.contains('hidden');
+  var fx = usd ? num($('s-fx').value) : 1;
+  var units = num($('s-units').value), amount = num($('s-amount').value);
+  var fee = num($('s-fee').value) || 0, sign = sType === 'Sell' ? -1 : 1;
+  if (source === 'price') priceEdited = $('s-price').value !== '';
+  if (source === 'amount') priceEdited = false;
+  if (sType !== 'Div') {
+    if (!priceEdited && units && amount && fx) {
+      // amount = units * price * fx + fee (buy) / - fee (sell)
+      $('s-price').value = round((amount - sign * fee) / units / fx, 6);
+    } else if (priceEdited && units && fx) {
+      var p = num($('s-price').value);
+      if (p) $('s-amount').value = round(units * p * fx + sign * fee, 2);
+    }
+  }
+  preview();
+}
+
+function singleEntry() {
+  var usd = !$('s-fx-box').classList.contains('hidden');
+  if (sType === 'Div') {
+    return { date: $('s-date').value, type: 'Div', symbol: currentSymbol(),
+             units: 1, price: num($('s-divamt').value), fee: 0, fx: null };
+  }
+  return { date: $('s-date').value, type: sType, symbol: currentSymbol(),
+           units: num($('s-units').value), price: num($('s-price').value),
+           fee: num($('s-fee').value) || 0, fx: usd ? num($('s-fx').value) : null };
+}
+
+function preview() {
+  var s = currentInfo() || { units: 0, cost: 0 };
+  var e = singleEntry(), box = $('s-preview');
+  if (sType === 'Div') {
+    box.innerHTML = e.price ? 'บันทึกปันผล <b>฿' + fmt(e.price) + '</b> จาก ' + (e.symbol || '–') : 'กรอกจำนวนเงินปันผล';
+    return;
+  }
+  if (!e.units || !e.price) { box.innerHTML = 'กรอกจำนวนหน่วยและยอดเงิน (หรือราคา) เพื่อดูผลลัพธ์'; return; }
+  var value = e.units * e.price * (e.fx || 1);
+  var units, cost;
+  if (sType === 'Buy') { units = s.units + e.units; cost = s.cost + value + e.fee; }
+  else { units = s.units - e.units; cost = s.units ? s.cost * units / s.units : 0; }
+  var gain = sType === 'Sell' && s.units ? value - e.fee - s.cost * e.units / s.units : null;
+  box.innerHTML = (sType === 'Buy' ? 'ซื้อ' : 'ขาย') + ' <b>' + fmt(e.units, 6) + '</b> หน่วย × ฿' + fmt(e.price * (e.fx || 1)) +
+    ' = <b>฿' + fmt(value) + '</b><br>หลังบันทึก: ถือ <b>' + fmt(units, 6) + '</b> หน่วย · ต้นทุนเฉลี่ย <b>฿' +
+    fmt(units > 0 ? cost / units : 0) + '</b>' +
+    (gain !== null ? '<br>กำไร/ขาดทุนที่รับรู้ ≈ <b>฿' + fmt(gain) + '</b>' : '');
+}
+
+$('s-symbol').onchange = function () { $('s-amount').value = ''; $('s-price').value = ''; priceEdited = false; onSymbol(); };
+$('s-symbol-new').oninput = onSymbol;
+['units', 'fee', 'fx'].forEach(function (k) { $('s-' + k).oninput = function () { recalc(k); }; });
+$('s-amount').oninput = function () { recalc('amount'); };
+$('s-price').oninput = function () { recalc('price'); };
+$('s-divamt').oninput = preview;
+document.querySelectorAll('#s-type button').forEach(function (b) {
+  b.onclick = function () {
+    sType = b.dataset.v;
+    document.querySelectorAll('#s-type button').forEach(function (x) { x.classList.toggle('on', x === b); });
+    $('s-trade').classList.toggle('hidden', sType === 'Div');
+    $('s-div').classList.toggle('hidden', sType !== 'Div');
+    recalc();
+  };
+});
+
+$('s-save').onclick = function () { save([singleEntry()], 's', function () {
+  ['s-amount', 's-units', 's-price', 's-divamt'].forEach(function (id) { $(id).value = ''; });
+  $('s-fee').value = '0'; priceEdited = false;
+}); };
+
+function renderRecent() {
+  $('recent').innerHTML = DATA.recent.map(function (r) {
+    return '<tr><td>' + r.date + '</td><td>' + r.type + '</td><td>' + r.symbol + '</td><td class="n">' +
+      fmt(r.units, 6) + '</td><td class="n">฿' + fmt(r.price) + '</td><td class="n" style="color:var(--muted)">#' + r.row + '</td></tr>';
+  }).join('');
+}
+
+/* ---------- DCA ---------- */
+
+function renderDca() {
+  if (!$('d-date').value) $('d-date').value = DATA.today;
+  var list = DATA.symbols.filter(function (s) { return s.dca !== null; });
+  if (!list.length) {
+    $('d-list').innerHTML = '<div class="info">ยังไม่มีสินทรัพย์ที่ติด "dca" ในคอลัมน์ G ของ Portfolio Summary</div>';
+    return;
+  }
+  $('d-list').innerHTML = list.map(function (s, i) {
+    return '<div class="dca" data-sym="' + encodeURIComponent(s.symbol) + '" data-usd="' + (s.isUsd ? 1 : 0) + '">' +
+      '<div class="head"><input type="checkbox" class="d-on" checked> ' + s.symbol +
+      '<small>' + (s.priceThb ? 'ราคาวันนี้ ฿' + fmt(s.priceThb) : '') + '</small></div>' +
+      '<div class="row"><div><label>ยอดเงิน (บาท)</label><input class="d-amount" inputmode="decimal" value="' + (s.dca || '') + '"></div>' +
+      '<div><label>จำนวนหน่วยที่ได้</label><input class="d-units" inputmode="decimal"></div></div>' +
+      '<div class="row"><div><label>ราคาต่อหน่วย (' + (s.isUsd ? 'USD' : 'บาท') + ')</label><input class="d-price" inputmode="decimal" placeholder="คำนวณให้"></div>' +
+      (s.isUsd ? '<div><label>USD/THB</label><input class="d-fx" inputmode="decimal" value="' + (DATA.fx ? round(DATA.fx, 4) : '') + '"></div>' : '') +
+      '</div></div>';
+  }).join('');
+  document.querySelectorAll('.dca').forEach(function (card) {
+    var q = function (c) { return card.querySelector(c); };
+    var edited = false;
+    var update = function (src) {
+      if (src === 'price') edited = q('.d-price').value !== '';
+      if (src === 'amount') edited = false;
+      var fx = q('.d-fx') ? num(q('.d-fx').value) : 1, u = num(q('.d-units').value), a = num(q('.d-amount').value);
+      if (!edited && u && a && fx) q('.d-price').value = round(a / u / fx, 6);
+      else if (edited && u && fx && num(q('.d-price').value)) q('.d-amount').value = round(u * num(q('.d-price').value) * fx, 2);
+    };
+    q('.d-amount').oninput = function () { update('amount'); };
+    q('.d-units').oninput = function () { update('units'); };
+    q('.d-price').oninput = function () { update('price'); };
+    if (q('.d-fx')) q('.d-fx').oninput = function () { update('fx'); };
+    q('.d-on').onchange = function () { card.classList.toggle('off', !this.checked); };
+  });
+}
+
+$('d-save').onclick = function () {
+  var entries = [], missing = [];
+  document.querySelectorAll('.dca').forEach(function (card) {
+    if (!card.querySelector('.d-on').checked) return;
+    var s = decodeURIComponent(card.dataset.sym), fx = card.querySelector('.d-fx');
+    var e = { date: $('d-date').value, type: 'Buy', symbol: s, fee: 0,
+              units: num(card.querySelector('.d-units').value), price: num(card.querySelector('.d-price').value),
+              fx: fx ? num(fx.value) : null };
+    if (!e.units || !e.price) missing.push(s); else entries.push(e);
+  });
+  if (missing.length) return showMsg('d', 'err', 'ยังไม่ได้กรอกจำนวนหน่วย/ราคา: ' + missing.join(', ') + '\n(เอาเครื่องหมายถูกออกถ้าเดือนนี้ไม่ได้ซื้อ)');
+  if (!entries.length) return showMsg('d', 'err', 'ไม่ได้เลือกรายการใดเลย');
+  save(entries, 'd', function () {
+    document.querySelectorAll('.d-units, .d-price').forEach(function (x) { x.value = ''; });
+  });
+};
+
+/* ---------- save + messages ---------- */
+
+function showMsg(p, kind, text, list, actions) {
+  var box = $(p + '-msg');
+  box.innerHTML = '';
+  var d = document.createElement('div'); d.className = 'msg ' + kind; d.textContent = text;
+  if (list && list.length) {
+    var ul = document.createElement('ul');
+    list.forEach(function (t) { var li = document.createElement('li'); li.textContent = t; ul.appendChild(li); });
+    d.appendChild(ul);
+  }
+  (actions || []).forEach(function (a) {
+    var b = document.createElement('button'); b.className = 'primary' + (a.ghost ? ' ghost' : '');
+    b.textContent = a.label; b.onclick = a.fn; d.appendChild(b);
+  });
+  box.appendChild(d);
+}
+
+function save(entries, p, onDone, confirmed) {
+  var btn = $(p + '-save');
+  btn.disabled = true; btn.textContent = 'กำลังบันทึก…';
+  call('pfSaveTransactions', entries, !!confirmed).then(function (r) {
+    if (r.ok) {
+      showMsg(p, 'ok', '✅ บันทึกแล้ว ' + entries.length + ' รายการ (Transaction แถว ' +
+        (r.rows[0] === r.rows[1] ? r.rows[0] : r.rows[0] + '–' + r.rows[1]) + ')');
+      onDone(); return load();
+    }
+    if (r.errors) return showMsg(p, 'err', 'ยังบันทึกไม่ได้:', r.errors);
+    showMsg(p, 'warn', 'โปรดตรวจสอบก่อนบันทึก:', r.warnings, [
+      { label: 'ถูกต้องแล้ว บันทึกเลย', fn: function () { save(entries, p, onDone, true); } },
+      { label: 'กลับไปแก้', ghost: true, fn: function () { $(p + '-msg').innerHTML = ''; } },
+    ]);
+  }).catch(function (e) {
+    showMsg(p, 'err', 'เกิดข้อผิดพลาด: ' + e.message);
+  }).then(function () {
+    btn.disabled = false; btn.textContent = p === 's' ? 'บันทึก' : 'บันทึกทั้งหมด';
+  });
+}
+
+showTab(INITIAL_TAB);
+load();
+</script>
+</body>
+</html>
