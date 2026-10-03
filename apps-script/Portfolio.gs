@@ -363,10 +363,21 @@ function pfBuildSnapshot_(ss) {
   }
   var prevHeader = col > 2 ? pfParseHeaderDate_(grid[0][col - 2]) : null;
 
+  // Labels above "Total" are the holdings; the rows below it (gain, FX) are not.
   var current = {};
+  var holdings = [];
+  var pastTotal = false;
   sum.getRange(1, 1, sum.getLastRow(), 3).getValues().forEach(function (r) {
-    if (String(r[0]).trim()) current[pfNorm_(r[0])] = r[2];
+    var label = String(r[0]).trim();
+    if (!label) return;
+    current[pfNorm_(label)] = r[2];
+    if (pfNorm_(label) === 'total') pastTotal = true;
+    if (!pastTotal && pfNum_(r[2])) holdings.push(label); // skip empty/zero rows
   });
+  var monthlyKeys = {};
+  for (var j = 1; j < lastRow; j++) monthlyKeys[pfNorm_(grid[j][0])] = true;
+  // e.g. a new stock added to Portfolio Summary but not to Monthly Summary
+  var missing = holdings.filter(function (l) { return !monthlyKeys[pfNorm_(l)]; });
 
   var values = [];
   var unmatched = [];
@@ -381,7 +392,7 @@ function pfBuildSnapshot_(ss) {
     values.push([v]);
   }
   return { sheet: mon, col: col, lastRow: lastRow, prevHeader: prevHeader,
-           values: values, unmatched: unmatched, broken: broken };
+           values: values, unmatched: unmatched, broken: broken, missing: missing };
 }
 
 function pfWriteSnapshot_(snap, tz) {
@@ -408,6 +419,7 @@ function pfSnapshotNow() {
   }
   if (snap.broken.length) notes.push('ค่าที่เป็น error (จะเว้นว่างไว้):\n  ' + snap.broken.join('\n  '));
   if (snap.unmatched.length) notes.push('หาแถวที่ตรงกันใน Portfolio Summary ไม่เจอ:\n  ' + snap.unmatched.join('\n  '));
+  if (snap.missing.length) notes.push('มีใน Portfolio Summary แต่ยังไม่มีแถวใน Monthly Summary (มูลค่าจะไม่ถูกบันทึก — เพิ่มแถวก่อน):\n  ' + snap.missing.join('\n  '));
   var colName = sheetColumnName_(snap.col);
   var msg = 'จะบันทึกค่าปัจจุบันจาก Portfolio Summary ลงคอลัมน์ ' + colName + ' ของ Monthly Summary' +
     (notes.length ? '\n\n' + notes.join('\n\n') : '') + '\n\nดำเนินการต่อ?';
